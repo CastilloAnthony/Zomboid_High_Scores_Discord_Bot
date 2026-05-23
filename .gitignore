@@ -12,6 +12,7 @@ PlayerCharacterDataCollector/
 !skill_aliases.json
 !skill_emojis.json
 test.py
+unit_test_db.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
