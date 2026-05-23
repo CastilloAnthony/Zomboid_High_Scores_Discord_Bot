@@ -307,7 +307,7 @@ INSERT INTO player_data (
                 )
 
             for trait in player_data_dictionary['traits']:
-                trait_string = f'"{trait}"'
+                trait_string = f'{trait}'
                 cursor.execute('SELECT COUNT(*) FROM traits WHERE trait = ?', (trait_string, ))
                 trait_exists = cursor.fetchone()[0] > 0
                 if not trait_exists:
@@ -315,207 +315,162 @@ INSERT INTO player_data (
                 cursor.execute('SELECT id FROM traits WHERE trait = ?', (trait_string, ))
                 trait_id = cursor.fetchone()[0]
                 cursor.execute('INSERT INTO player_traits (player_id, trait_id) VALUES (?, ?)', (player_id, trait_id))
-            changes.append(('newPlayer', player_data_dictionary['username']))
+
+            # cursor.execute('SELECT id FROM players WHERE username = ?', (player_data_dictionary['username']))
+            # player_id = cursor.fetchone()[0]
+            changes.append((player_id, 'newPlayer', player_data_dictionary['username']))
             connection.commit()
             connection.close()
             # print(f'Added {player_data_dictionary['username']} to the database.')
         return changes
     # end update_player
 
-#     def setup_databases(self, player_data_dictionary) -> None:
-#         if not Path(self.__database_path).is_dir(): # Create local player data directory if it doesn't exist
-#             Path(self.__database_path).mkdir()
+    def get_column_names(self, table:str) -> list:
+        column_names = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute(f'PRAGMA table_info({table})')
+        columns = cursor.fetchall()
+        column_names = [info[1] for info in columns]
+        connection.close()
+        return column_names
+    # end get_column_names
+    
+    def get_player(self, username:str) -> dict:
+        """Reconstructs the player data from the database based on username into the same dictionary format that is used when inserting the data
 
-#         connection = self.connect_to_player_data()
-#         res = connection.cursor().execute("SELECt name FROM sqlite_master")
-#         tables = []
-#         notNone = True
-#         while notNone:
-#             temp = res.fetchone()
-#             if temp != None:
-#                 tables.append(temp[0])
-#             else:
-#                 notNone = False
-#         if "player_data" not in tables:
-#             player_data_execute_string = [
-#                 "CREATE TABLE player_data ( username VARCHAR PRIMARY KEY,",
-#                 "steam_id INTEGER,",
-#                 "server_user_id INTEGER,",
-#                 "ping INTEGER,",
-#                 "displa_name VARCHAR,",
-#                 "character_name VARCHAR,",
-#                 "access_level VARCHAR,",
-#                 "role VARCHAR,",
-#                 "faction VARCHAR,",
-#                 "is_alive INTEGER,",
-#                 "profession VARCHAR,",
-#                 "time_survived_float REAL,",
-#                 "time_survived_string VARCHAR,",
-#                 "zombie_kills INTEGER,",
-#                 "survivor_kills INTEGER,",
+        Args:
+            username (str): The username of the user we wish to retrieve from the database
 
-#                 # COORDS
-#                 "x REAL,",
-#                 "y REAL,",
-#                 "z REAL,",
+        Returns:
+            dict: The dictionary of the player data from the database in the same format it was when inserted
+        """
+        player_data_dict = {}
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT id FROM players WHERE username = ?', (username,))
+        player_id = cursor.fetchone()[0]
+        player_data_columns = self.get_column_names('player_data')
+        cursor.execute('SELECT * FROM player_data WHERE player_id = ?', (player_id,))
+        player_data = cursor.fetchall()[0]
+        for key, value in enumerate(player_data_columns):
+            player_data_dict[value] = player_data[key]
+        
+        player_data_dict['coords'] = {}
+        cursor.execute('SELECT * FROM coords WHERE player_id = ?', (player_id,))
+        coords = cursor.fetchall()[0]
+        coords_columns = self.get_column_names('coords')
+        for key, value in enumerate(coords_columns[1:]):
+            player_data_dict['coords'][value] = coords[key]
 
-#                 # NUTRITION
-#                 "weight INT,",
-#                 "calories REAL,",
-#                 "carbohydrates REAL,",
-#                 "proteins REAL,",
-#                 "lipids REAL,",
-#                 ")"
-#             ]
-#             connection.cursor().execute(" ".join(player_data_execute_string))
-#         # if "coords" not in tables:
-#         #     connection.cursor().execute("CREATE TABLE coords (username VARCHAR PRIMARY KEY, x REAL, y REAL, z REAL)")
-#         # if "nutrition" not in tables:
-#         #     connection.cursor().execute("CREATE TABLE nutrition (username VARCHAR PRIMARY KEY, weight INT, calories REAL, carbohydrates REAL, proteins REAL, lipids REAL)")
-#         if "perks" not in tables: # Requires an initial list of perks (to keep it dynamic according to the user's perk list)
-#             perk_execute_string = ["CREATE TABLE perks ( username VARCHAR PRIMARYU KEY,",]
-#             for perk in player_data_dictionary['perks']:
-#                 perk_execute_string.append(f"{perk} INT")
-#             perk_execute_string.append(")")
-#             connection.cursor().execute(" ".join(perk_execute_string))
-#         if "traits" not in tables: # Composite Primary Key: (username VARCHAR, trait VARCHAR(100) PRIMARY KEY)
-#             # Alternatively have two tables here, one that is just traits, then one that utilizing the composite primary key as the key and then 
-#             # referencing both player usernames from the main table and traits names from the trait table
-#             connection.cursor().execute("CREATE TABLE traits (trait VARCHAR(100) PRIMARY KEY)")
-#             # Create link table
-#             connection.cursor().execute("CREATE TABLE playerTraits ((username, trait) PRIMARY KEY, FOREIGN KEY username REFERENCES player_data(username), FOREIGN KEY trait REFERENCES traits(trait), username VARCHAR, trait VARCHAR(100))")
-#         if "timestamps" not in tables:
-#             connection.cursor().execute("CREATE TABLE timestamps (username VARCHAR PRIMARY KEY, timestamp REAL)")
-#         if "deaths" not in tables:
-#             connection.cursor().execute("CREATE TABLE deaths (username VARCHAR PRIMARY KEY, timestamp REAL, death BLOB)")
-#         connection.commit()
-#         connection.close()
-#     # end setup_databases
+        player_data_dict['nutrition'] = {}
+        cursor.execute('SELECT * FROM nutrition WHERE player_id = ?', (player_id,))
+        nutrition = cursor.fetchall()[0]
+        nutrition_columns = self.get_column_names('nutrition')
+        for key, value in enumerate(nutrition_columns[1:]):
+            player_data_dict['nutrition'][value] = nutrition[key]
 
-#     # def update_player_data(self, player_data_dictionary) -> list:
-#     #     # Returns a list of everything that has changed 
-#     #     if not self.__database_setup:
-#     #         self.setup_databases(player_data_dictionary)
-#     #     if self.check_if_username_exists("player_data", player_data_dictionary['username']):
-#     #         changes = []
-#     #         for key, value in player_data_dictionary:
-#     #             if key == "perks":
-#     #                 for perk, level in player_data_dictionary[key]:
-#     #                     prev = self.get_from("player_data", player_data_dictionary['username'], perk) # Revisit this logic
-#     #                     if value != prev:
-#     #                         changes.append(('perks', key, value, prev,))
-#     #                         self.update_one_in_player_data(player_data_dictionary['username'], key, value)
-#     #             elif key == "traits":
-#     #                 pass
-#     #             else:
-#     #                 pass
-#     #         return changes
-#     #     return []
-#     # # end update_player_data
+        player_data_dict['perks'] = {}
+        cursor.execute('SELECT * FROM perks WHERE player_id = ?', (player_id,))
+        perks = cursor.fetchall()[0]
+        perks_columns = self.get_column_names('perks')
+        for key, value in enumerate(perks_columns[1:]):
+            player_data_dict['perks'][value] = perks[key]
 
-#     def check_if_username_exists(self, table:str, username:str) -> bool:
-#         connection = self.connect_to_player_data()
-#         res = connection.cursor().execute(f"SELECT username FROM {table} WHERE username=\"{username}\"")
-#         if res.fetchone():
-#             connection.close()
-#             return True
-#         else:
-#             connection.close()
-#             return False
-#     # end check_if_username_exists
+        player_data_dict['traits'] = {}
+        cursor.execute('SELECT trait_id FROM player_traits WHERE player_id = ?', (player_id,))
+        trait_ids = cursor.fetchall()
+        traits = []
+        for trait_id in trait_ids:
+            cursor.execute('SELECT trait FROM traits WHERE id = ?', (trait_id))
+            traits.append(cursor.fetchone()[0])
+        player_data_dict['traits'] = traits
 
-#     def update_one_in_player_data(self, username:str, columnName:str, value:str) -> bool:
-#         success = False
-#         connection = self.connect_to_player_data()
-#         input = f"UPDATE \"player_data\" SET {columnName} = {value} WHERE username = \"{username}"
-#         res = connection.cursor().execute(input)
-#         if res.rowcount > 0:
-#             success = True
-#         connection.commit()
-#         connection.close()
-#         return success
-#     # end update_one_in
+        cursor.execute('SELECT last_updated FROM players WHERE id = ?', (player_id,))
+        timestamp = cursor.fetchone()[0]
+        player_data_dict['timestamp'] = timestamp
 
-#     def insert_into(self, table:str, *args:str, **kwargs) -> bool:
-#         newKwargs = []
-#         for arg in args:
-#             if arg in kwargs:
-#                 if isinstance(kwargs[arg], str):
-#                     newKwargs.append(f"\"{str(kwargs[arg])}\"")
-#                 else:
-#                     newKwargs.append(str(kwargs[arg]))
-#         connection = self.connect_to_player_data()
-#         # kwargs and args needs to be sync'd up somehow, perhaps converting kwargs into a list would be ideal
-#         if self.check_if_username_exists(table, kwargs["username"]):
-#             updates = []
-#             for index, arg in enumerate(args):
-#                 updates.append(f"{arg} = {newKwargs[index]}")
-#             input = f"UPDATE {table} SET {", ".join(updates)} WHERE username = \"{kwargs["username"]}\";"
-#             # print(input)
-#             res = connection.cursor().execute(input)
-#         else:
-#             input = f"INSERT INTO {table} ({", ".join(args)}) VALUES ({", ".join(newKwargs)});"
-#             # print(input)
-#             res = connection.cursor().execute(input)
-#         connection.commit()
-#         connection.close()
-#         return True
-#     # end insert_into
+        connection.close()
+        return player_data_dict
+    # end get_player
+    
+    def get_usernames_with(self, column_name:str, value) -> list:
+        players = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT name FROM sqlite_master WHERE type="table"')
+        tables = cursor.fetchall()
+        acquired_table_name = ''
+        if not column_name  == 'trait':
+            for table_name in [table[0] for table in tables]:
+                for column in self.get_column_names(table_name):
+                    if column == column_name:
+                        acquired_table_name = table_name
+                        break
+                if not acquired_table_name == '':
+                    break
+            cursor.execute(f'SELECT player_id FROM {acquired_table_name} WHERE {column_name} = ?', (value,))
+            player_ids = cursor.fetchall()
+            print(player_ids)
+            for player_id in player_ids:
+                cursor.execute('SELECT username FROM players WHERE id = ?', (player_id[0],))
+                players.append(cursor.fetchone()[0])
+        else:
+            player_ids = []
+            cursor.execute('SELECT id FROM traits WHERE trait = ?', (value,))
+            trait_ids = cursor.fetchall()
+            for trait_id in trait_ids:
+                cursor.execute('SELECT player_id FROM player_traits WHERE trait_id = ?', (trait_id[0],))
+                player_ids = cursor.fetchall()
+            for player_id in player_ids:
+                cursor.execute('SELECT username FROM players WHERE id = ?', (player_id[0],))
+                players.append(cursor.fetchone()[0])
+        connection.close()
+        return players
+    # end get_usernames_with
+    
+    def get_all_usernames(self) -> list:
+        usernames = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT username FROM players')
+        usernames = [user[0] for user in cursor.fetchall()]
+        connection.close()
+        return usernames
+    # end get_all_usernames
 
-#     def get_all_usernames(self, table:str) -> list[str]:
-#         connection = self.connect_to_player_data()
-#         res = connection.cursor().execute(f"SELECT username FROM {table}")
-#         result = res.fetchall()
-#         connection.close()
-#         players = []
-#         for player in result:
-#             players.append(player[0])
-#         return players
-#     # end get_all_usernames
 
-#     def get_from(self, table:str, username:str, *args:str) -> dict: # WIP
-#         resulting_dict = {}
-#         connection = self.connect_to_player_data()
-#         # print(args)
-#         if args:
-#             res = connection.cursor().execute(f"SELECT {", ".join(args)} FROM {table}")
-#             result = res.fetchall()
-#             for index, arg in enumerate(args):
-#                 resulting_dict[arg] = result[0][index]
-#             if 'username' not in resulting_dict:
-#                 resulting_dict['username'] = username
-#         else:
-#             res = connection.cursor().execute(f"SELECT name FROM pragma_table_info('{table}');")
-#             column_names = []
-#             result = res.fetchall()
-#             for i in result:
-#                 column_names.append(i[0])
-#             # print(column_names)
-#             res = connection.cursor().execute(f"SELECT * FROM {table} WHERE username = \"{username}\"")
-#             result = res.fetchall()
-#             for i in result:
-#                 for index, name in enumerate(column_names):
-#                     resulting_dict[name] = i[index]
-#         return resulting_dict
-#     # end get_from
+    def get_all_nutrition_columns(self) -> list:
+        return self.get_column_names('nutrition')[1:]
+    # end get_all_nutrition_columns
 
-#     def get_players_with(self, table:str, column_name:str, value) -> list[str]:
-#         # Returns list of players where the given column_name is equal to the requested value
-#         return ['']
-#     # end get_from
-# # end Agent_Database
 
-# if __name__ == "__main__":
-#     newDB = Agent_Database()
-#     newDB.setup_databases({"perks" : {"axe" : 1,}})
-#     # print(newDB.check_if_username_exists(table="coords", username="ComradeWolf"))
-#     newDB.insert_into("coords", "username", "x", "y", "z", username="ComradeWolf", x=7, y=66, z=1)
-#     newDB.insert_into("coords", "username", "x", "y", "z", username="Pedguin", x=7, y=66, z=1)
-#     newDB.insert_into("coords", "username", "x", "y", "z", username="Osie", x=7, y=66, z=1)
-#     newDB.insert_into("coords", "username", "x", "y", "z", username="Hestefyr", x=7, y=66, z=1)
-#     newDB.insert_into("coords", "username", "x", "y", "z", username="Dawn", x=7, y=66, z=1)
-#     newDB.insert_into("coords", "username", "x", "y", "z", username="Cyol", x=7, y=66, z=1)
-#     print(newDB.get_all_usernames("coords"))
-#     print(newDB.get_from("coords", "Cyol"))
+    def get_all_perks(self) -> list:
+        return self.get_column_names('perks')[1:]
+    # end get_all_perks
 
-#     # newDB.get_from("coords", )
+    
+    def get_all_traits(self) -> list:
+        traits = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT trait FROM traits')
+        traits = [trait[0] for trait in cursor.fetchall()]
+        connection.close()
+        return traits
+    # end get_all_traits
+
+    
+    def get_top_in(self, perk:str, quantity:int) -> list[tuple]:
+        players = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute(f'SELECT player_id, {perk} FROM perks ORDER BY {perk} DESC')
+        player_id_perk_values = cursor.fetchall()
+        for player_id_perk in player_id_perk_values:
+            cursor.execute('SELECT username FROM players WHERE id = ?', (player_id_perk[0],))
+            players.append((cursor.fetchone()[0], player_id_perk[1]))
+        connection.close()
+        return players[:quantity]
+    # end get_top_in
+# end Agent_Database
