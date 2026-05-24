@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS players (
                             username VARCHAR NOT NULL,
                             created REAL,
                             last_updated REAL,
-                            total_play_time REAL
+                            total_play_time REAL,
+                            last_login REAL
                             )
             ''')
         if "coords" not in tables:
@@ -256,7 +257,7 @@ CREATE TABLE IF NOT EXISTS perks (
                            (player_data_dictionary['username'],
                            player_data_dictionary['timestamp'],
                            player_data_dictionary['timestamp'],
-                           0))
+                           0, 0))
             cursor.execute(f'SELECT id FROM players WHERE username = "{player_data_dictionary['username']}"')
             player_id = cursor.fetchone()[0]
             cursor.execute('''
@@ -577,6 +578,46 @@ INSERT INTO player_data (
         connection.close()
         return players_total_playtime
     # end get_player_total_playtime
+
+    def get_player_last_login(self, username:str) -> list[tuple[str, float]]:
+        player_last_login = []
+        connection = self._connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT last_login FROM players WHERE username = ?', (username,))
+        player_last_login.append((username, cursor.fetchone()[0]))
+        connection.close()
+        return player_last_login
+    # end get_playeR_last_login
+
+    def update_player_total_play_time(self, username:str, incrementBy:float) -> None:
+        """Increments the total play time of a player stored in the database.
+
+        Args:
+            username (str): The username of the player to change.
+            incrementBy (float): The number to change the total play time by. (in seconds)
+        """
+        connection = self._connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT total_play_time FROM players WHERE username = ?', (username,))
+        result = cursor.fetchone()[0]
+        cursor.execute(f'UPDATE players SET total_play_time = {result+incrementBy} WHERE username = {username}')
+        connection.commit()
+        connection.close()
+    # end update_player_total_play_time
+
+    def update_player_last_login(self, username:str, timestamp:float) -> None:
+        """Sets the given user's last login time to the timestamp provided.
+
+        Args:
+            username (str): The username of the player to change.
+            timestamp (float): The timestamp to set the user's last login time to.
+        """
+        connection = self._connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute(f'UPDATE players SET last_login = {timestamp} WHERE username = {username}')
+        connection.commit()
+        connection.close()
+    # end update_player_last_login
 
     def get_top_in(self, column_name:str, quantity:int = 10, descending=True) -> list[tuple[str, int | float]]:
         """Retrieves a truncated list of players in a specific category from the database.
