@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS players (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             username VARCHAR NOT NULL,
                             created REAL,
-                            last_updated REAL
+                            last_updated REAL,
+                            total_play_time REAL
                             )
             ''')
         if "coords" not in tables:
@@ -213,10 +214,11 @@ CREATE TABLE IF NOT EXISTS perks (
             connection.commit()
             connection.close()
         else:
-            cursor.execute('INSERT INTO players (username, created, last_updated) VALUES (?, ?, ?)',
+            cursor.execute('INSERT INTO players (username, created, last_updated, total_play_time) VALUES (?, ?, ?, ?)',
                            (player_data_dictionary['username'],
                            player_data_dictionary['timestamp'],
-                           player_data_dictionary['timestamp']))
+                           player_data_dictionary['timestamp'],
+                           0))
             cursor.execute(f'SELECT id FROM players WHERE username = "{player_data_dictionary['username']}"')
             player_id = cursor.fetchone()[0]
             cursor.execute('''
@@ -320,6 +322,34 @@ INSERT INTO player_data (
         return column_names
     # end get_column_names
     
+    def get_all_usernames(self) -> list:
+        usernames = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT username FROM players')
+        usernames = [user[0] for user in cursor.fetchall()]
+        connection.close()
+        return usernames
+    # end get_all_usernames
+
+    def get_all_nutrition_columns(self) -> list:
+        return self.get_column_names('nutrition')[1:]
+    # end get_all_nutrition_columns
+
+    def get_all_perks(self) -> list:
+        return self.get_column_names('perks')[1:]
+    # end get_all_perks
+
+    def get_all_traits(self) -> list:
+        traits = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT trait FROM traits')
+        traits = [trait[0] for trait in cursor.fetchall()]
+        connection.close()
+        return traits
+    # end get_all_traits
+
     def get_player(self, username:str) -> dict:
         """Reconstructs the player data from the database based on username into the same dictionary format that is used when inserting the data
 
@@ -411,34 +441,6 @@ INSERT INTO player_data (
         connection.close()
         return players
     # end get_usernames_with
-    
-    def get_all_usernames(self) -> list:
-        usernames = []
-        connection = self.connect_to_player_data() # Connect to
-        cursor = connection.cursor() # Create cursor for the database
-        cursor.execute('SELECT username FROM players')
-        usernames = [user[0] for user in cursor.fetchall()]
-        connection.close()
-        return usernames
-    # end get_all_usernames
-
-    def get_all_nutrition_columns(self) -> list:
-        return self.get_column_names('nutrition')[1:]
-    # end get_all_nutrition_columns
-
-    def get_all_perks(self) -> list:
-        return self.get_column_names('perks')[1:]
-    # end get_all_perks
-
-    def get_all_traits(self) -> list:
-        traits = []
-        connection = self.connect_to_player_data() # Connect to
-        cursor = connection.cursor() # Create cursor for the database
-        cursor.execute('SELECT trait FROM traits')
-        traits = [trait[0] for trait in cursor.fetchall()]
-        connection.close()
-        return traits
-    # end get_all_traits
 
     def get_player_last_updated_timestamp(self, username:str = '') -> list:
         players_last_updated_timestamps = []
@@ -467,6 +469,16 @@ INSERT INTO player_data (
         connection.close()
         return players_creation_timestamps
     # end get_player_creation_timestamp
+
+    def get_player_total_playtime(self, username:str) -> list[tuple]:
+        players_total_playtime = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT total_play_time FROM players WHERE username = ?', (username,))
+        players_total_playtime.append((username, cursor.fetchone()[0]))
+        connection.close()
+        return players_total_playtime
+    # end get_player_total_playtime
 
     def get_top_in(self, column_name:str, quantity:int = 10) -> list[tuple]:
         players_in = []
