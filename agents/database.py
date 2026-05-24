@@ -209,24 +209,9 @@ CREATE TABLE IF NOT EXISTS perks (
                     current_value = cursor.fetchone()[0]
                     if current_value != value:
                         changes.append((key, current_value, value))
-                        cursor.execute(f'UPDATE player_data SET {key} = {value} WHERE player_id = {player_id}')
-            # player_data
-
-            # coords
-
-            # nutrition
-
-            # perks
-            # cursor.execute(f'''UPDATE players SET ''')
-            # for perk, value in player_data_dictionary['perks'].items():
-            #     cursor.execute(f'UPDATE perks SET "{perk}" = {value}')
-
-            # traits
-
-            
+                        cursor.execute(f'UPDATE player_data SET {key} = {value} WHERE player_id = {player_id}')           
             connection.commit()
             connection.close()
-            # print(f'Updated {player_data_dictionary['username']} in the database.')
         else:
             cursor.execute('INSERT INTO players (username, created, last_updated) VALUES (?, ?, ?)',
                            (player_data_dictionary['username'],
@@ -321,7 +306,6 @@ INSERT INTO player_data (
             changes.append((player_id, 'newPlayer', player_data_dictionary['username']))
             connection.commit()
             connection.close()
-            # print(f'Added {player_data_dictionary['username']} to the database.')
         return changes
     # end update_player
 
@@ -411,7 +395,6 @@ INSERT INTO player_data (
                     break
             cursor.execute(f'SELECT player_id FROM {acquired_table_name} WHERE {column_name} = ?', (value,))
             player_ids = cursor.fetchall()
-            print(player_ids)
             for player_id in player_ids:
                 cursor.execute('SELECT username FROM players WHERE id = ?', (player_id[0],))
                 players.append(cursor.fetchone()[0])
@@ -439,17 +422,14 @@ INSERT INTO player_data (
         return usernames
     # end get_all_usernames
 
-
     def get_all_nutrition_columns(self) -> list:
         return self.get_column_names('nutrition')[1:]
     # end get_all_nutrition_columns
-
 
     def get_all_perks(self) -> list:
         return self.get_column_names('perks')[1:]
     # end get_all_perks
 
-    
     def get_all_traits(self) -> list:
         traits = []
         connection = self.connect_to_player_data() # Connect to
@@ -460,17 +440,58 @@ INSERT INTO player_data (
         return traits
     # end get_all_traits
 
-    
-    def get_top_in(self, perk:str, quantity:int) -> list[tuple]:
-        players = []
+    def get_player_last_updated_timestamp(self, username:str = '') -> list:
+        players_last_updated_timestamps = []
         connection = self.connect_to_player_data() # Connect to
         cursor = connection.cursor() # Create cursor for the database
-        cursor.execute(f'SELECT player_id, {perk} FROM perks ORDER BY {perk} DESC')
-        player_id_perk_values = cursor.fetchall()
-        for player_id_perk in player_id_perk_values:
-            cursor.execute('SELECT username FROM players WHERE id = ?', (player_id_perk[0],))
-            players.append((cursor.fetchone()[0], player_id_perk[1]))
+        if username == '':
+            cursor.execute('SELECT username, last_updated FROM players')
+            players_last_updated_timestamps = [(user[0], user[1],) for user in cursor.fetchall()]
+        else:
+            cursor.execute('SELECT username, last_updated FROM players WHERE username = ?', (username,))
+            players_last_updated_timestamps = cursor.fetchone()
         connection.close()
-        return players[:quantity]
+        return players_last_updated_timestamps
+    # end get_player_last_updated_timestamp
+
+    def get_player_creation_timestamp(self, username:str = '') -> list:
+        players_creation_timestamps = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        if username == '':
+            cursor.execute('SELECT username, created FROM players')
+            players_creation_timestamps = [(user[0], user[1],) for user in cursor.fetchall()]
+        else:
+            cursor.execute('SELECT username, created FROM players WHERE username = ?', (username,))
+            players_creation_timestamps = cursor.fetchone()
+        connection.close()
+        return players_creation_timestamps
+    # end get_player_creation_timestamp
+
+    def get_top_in(self, column_name:str, quantity:int = 10) -> list[tuple]:
+        players_in = []
+        connection = self.connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT name FROM sqlite_master WHERE type="table"')
+        tables = cursor.fetchall()
+        acquired_table_name = ''
+        if not column_name  in [
+            'trait', 'username', 'display_name', 'character_name', 'access_level', 
+            'role', 'faction', 'profession', 'time_survived_string'
+            ]: # Excluding columns that use strings
+            for table_name in [table[0] for table in tables]:
+                for column in self.get_column_names(table_name):
+                    if column == column_name:
+                        acquired_table_name = table_name
+                        break
+                if not acquired_table_name == '':
+                    break
+            cursor.execute(f'SELECT player_id, {column_name} FROM {acquired_table_name} ORDER BY {column_name} DESC')
+            player_ids = cursor.fetchall()
+            for player_id in player_ids:
+                cursor.execute('SELECT username FROM players WHERE id = ?', (player_id[0],))
+                players_in.append((cursor.fetchone()[0], player_id[1]))
+        connection.close()
+        return players_in[:quantity]
     # end get_top_in
 # end Agent_Database
