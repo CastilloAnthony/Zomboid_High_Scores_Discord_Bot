@@ -393,7 +393,12 @@ INSERT INTO player_data (
         return self._get_column_names('nutrition')[1:]
     # end get_all_nutrition_columns
 
-    def get_all_perks(self) -> list:
+    def get_all_perks(self) -> list[str]:
+        """Retrieves a list of all column names from the perks table.
+
+        Returns:
+            list[str]: a list of all column names in the perks table. 
+        """
         return self._get_column_names('perks')[1:]
     # end get_all_perks
 
@@ -561,30 +566,37 @@ INSERT INTO player_data (
         return players_creation_timestamps
     # end get_player_creation_timestamp
 
-    def get_player_total_playtime(self, username:str) -> list[tuple[str, float]]:
-        """Retrieves list with just one tuple with the username and their total playtime.
+    def get_player_total_playtime(self, username:str) -> tuple[str, float]:
+        """Retrieves a tuple with the username and their total playtime.
 
         Args:
             username (str): The name of the user to retrieve the total playtime of. 
 
         Returns:
-            list[tuple[str, float]]: A list of tuples with the format of (username, timestamp).
+            tuple[str, float]: A tuple with the format of (username, timestamp).
         """
         players_total_playtime = []
         connection = self._connect_to_player_data() # Connect to
         cursor = connection.cursor() # Create cursor for the database
         cursor.execute('SELECT total_play_time FROM players WHERE username = ?', (username,))
-        players_total_playtime.append((username, cursor.fetchone()[0]))
+        players_total_playtime = (username, cursor.fetchone()[0])
         connection.close()
         return players_total_playtime
     # end get_player_total_playtime
 
-    def get_player_last_login(self, username:str) -> list[tuple[str, float]]:
-        player_last_login = []
+    def get_player_last_login(self, username:str) -> tuple[str, float]:
+        """Retrieves a tuple with a username and their last login.
+
+        Args:
+            username (str): The name of the user to retrieve the total playtime of.
+
+        Returns:
+            tuple[str, float]: A single tuple 
+        """
         connection = self._connect_to_player_data() # Connect to
         cursor = connection.cursor() # Create cursor for the database
         cursor.execute('SELECT last_login FROM players WHERE username = ?', (username,))
-        player_last_login.append((username, cursor.fetchone()[0]))
+        player_last_login = (username, cursor.fetchone()[0])
         connection.close()
         return player_last_login
     # end get_playeR_last_login
