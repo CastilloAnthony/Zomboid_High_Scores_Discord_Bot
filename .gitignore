@@ -3,11 +3,9 @@ settings_*
 *.json
 *_PerkLog.txt
 *.old
-db_agent.py
 *.db
+*.db-journal
 *.code-workspace
-PerkLogs/
-PedguinsHighScoresCollector/
 PlayerCharacterDataCollector/
 !skill_aliases.json
 !skill_emojis.json

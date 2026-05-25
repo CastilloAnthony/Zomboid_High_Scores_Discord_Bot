@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS players (
                             username VARCHAR NOT NULL,
                             created REAL,
                             last_updated REAL,
-                            total_play_time REAL,
-                            last_login REAL
+                            last_login REAL,
+                            total_play_time REAL
                             )
             ''')
         if "coords" not in tables:
@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS perks (
                     trait_ids = [trait_id[0] for trait_id in cursor.fetchall()]
                     traits_player_had = []
                     for trait_id in trait_ids: # Getting all current traits
-                        cursor.execute('SELECT trait FROM traits WHERE trait_id = ?', (trait_id,))
+                        cursor.execute('SELECT trait FROM traits WHERE id = ?', (trait_id,))
                         traits_player_had.append(cursor.fetchone()[0])
                     for trait in value: # Adding new traits
                         if trait in traits_player_had: # Removing traits that will remain unchanged in the database
@@ -238,7 +238,7 @@ CREATE TABLE IF NOT EXISTS perks (
                             cursor.execute('INSERT INTO player_traits (player_id, trait_id) VALUES (?, ?)', (player_id, trait_id))
                             changes.append(('trait', 'gain', trait))
                     for trait in traits_player_had: # Removing old traits
-                        cursor.execute('SELECT trait_id FROM traits WHERE trait = ?', (trait,))
+                        cursor.execute('SELECT id FROM traits WHERE trait = ?', (trait,))
                         trait_id = cursor.fetchone()[0]
                         cursor.execute('DELETE FROM player_traits WHERE player_id = ? AND trait_id = ?', (player_id, trait_id))
                         changes.append(('trait', 'lost', trait))
@@ -253,11 +253,12 @@ CREATE TABLE IF NOT EXISTS perks (
             connection.commit()
             connection.close()
         else:
-            cursor.execute('INSERT INTO players (username, created, last_updated, total_play_time) VALUES (?, ?, ?, ?)',
+            cursor.execute('INSERT INTO players (username, created, last_updated, last_login, total_play_time) VALUES (?, ?, ?, ?, ?)',
                            (player_data_dictionary['username'],
                            player_data_dictionary['timestamp'],
                            player_data_dictionary['timestamp'],
-                           0, 0))
+                           player_data_dictionary['timestamp'],
+                           0,))
             cursor.execute(f'SELECT id FROM players WHERE username = "{player_data_dictionary['username']}"')
             player_id = cursor.fetchone()[0]
             cursor.execute('''
@@ -612,7 +613,7 @@ INSERT INTO player_data (
         cursor = connection.cursor() # Create cursor for the database
         cursor.execute('SELECT total_play_time FROM players WHERE username = ?', (username,))
         result = cursor.fetchone()[0]
-        cursor.execute(f'UPDATE players SET total_play_time = {result+incrementBy} WHERE username = {username}')
+        cursor.execute('UPDATE players SET total_play_time = ? WHERE username = ?', (result+incrementBy, username,))
         connection.commit()
         connection.close()
     # end update_player_total_play_time
@@ -626,7 +627,7 @@ INSERT INTO player_data (
         """
         connection = self._connect_to_player_data() # Connect to
         cursor = connection.cursor() # Create cursor for the database
-        cursor.execute(f'UPDATE players SET last_login = {timestamp} WHERE username = {username}')
+        cursor.execute(f'UPDATE players SET last_login = ? WHERE username = ?', (timestamp, username,))
         connection.commit()
         connection.close()
     # end update_player_last_login
