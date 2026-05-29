@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS players (
                             username VARCHAR NOT NULL,
                             created REAL,
                             last_updated REAL,
-                            last_login REAL,
+                            lastLogin REAL,
+                            last_poll REAL,
                             total_play_time REAL
                             )
             ''')
@@ -249,12 +250,13 @@ CREATE TABLE IF NOT EXISTS perks (
                     current_value = cursor.fetchone()[0]
                     if current_value != value:
                         changes.append((key, current_value, value))
-                        cursor.execute(f'UPDATE player_data SET {key} = {value} WHERE player_id = {player_id}')           
+                        cursor.execute(f'UPDATE player_data SET {key} = ? WHERE player_id = {player_id}', (value,))
             connection.commit()
             connection.close()
         else:
-            cursor.execute('INSERT INTO players (username, created, last_updated, last_login, total_play_time) VALUES (?, ?, ?, ?, ?)',
+            cursor.execute('INSERT INTO players (username, created, last_updated, lastLogin, last_poll, total_play_time) VALUES (?, ?, ?, ?, ?, ?)',
                            (player_data_dictionary['username'],
+                           player_data_dictionary['timestamp'],
                            player_data_dictionary['timestamp'],
                            player_data_dictionary['timestamp'],
                            player_data_dictionary['timestamp'],
@@ -434,27 +436,27 @@ INSERT INTO player_data (
         player_id = cursor.fetchone()[0]
         player_data_columns = self._get_column_names('player_data')
         cursor.execute('SELECT * FROM player_data WHERE player_id = ?', (player_id,))
-        player_data = cursor.fetchall()[0]
-        for key, value in enumerate(player_data_columns):
+        player_data = cursor.fetchall()[0][1:]
+        for key, value in enumerate(player_data_columns[1:]):
             player_data_dict[value] = player_data[key]
         
         player_data_dict['coords'] = {}
         cursor.execute('SELECT * FROM coords WHERE player_id = ?', (player_id,))
-        coords = cursor.fetchall()[0]
+        coords = cursor.fetchall()[0][1:]
         coords_columns = self._get_column_names('coords')
         for key, value in enumerate(coords_columns[1:]):
             player_data_dict['coords'][value] = coords[key]
 
         player_data_dict['nutrition'] = {}
         cursor.execute('SELECT * FROM nutrition WHERE player_id = ?', (player_id,))
-        nutrition = cursor.fetchall()[0]
+        nutrition = cursor.fetchall()[0][1:]
         nutrition_columns = self._get_column_names('nutrition')
         for key, value in enumerate(nutrition_columns[1:]):
             player_data_dict['nutrition'][value] = nutrition[key]
 
         player_data_dict['perks'] = {}
         cursor.execute('SELECT * FROM perks WHERE player_id = ?', (player_id,))
-        perks = cursor.fetchall()[0]
+        perks = cursor.fetchall()[0][1:]
         perks_columns = self._get_column_names('perks')
         for key, value in enumerate(perks_columns[1:]):
             player_data_dict['perks'][value] = perks[key]
@@ -472,10 +474,28 @@ INSERT INTO player_data (
         timestamp = cursor.fetchone()[0]
         player_data_dict['timestamp'] = timestamp
 
+        cursor.execute('SELECT * FROM players WHERE id = ?', (player_id,))
+        player_info = cursor.fetchall()[0][2:]
+        players_columns = self._get_column_names('players')
+        player_data_dict['db_meta_info'] = {}
+        for key, value in enumerate(players_columns[2:]):
+            player_data_dict['db_meta_info'][value] = player_info[key]
         connection.close()
         return player_data_dict
     # end get_player
     
+    def get_all_player_data(self, ) -> dict:
+        all_player_data = {}
+        connection = self._connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT username FROM players')
+        players = cursor.fetchall()
+        connection.close()
+        for player in players:
+            all_player_data[player[0]] = self.get_player(player[0])
+        return all_player_data
+    # end get_all_player_data
+
     def get_usernames_with(self, column_name:str, value) -> list[str]:
         """Retrieves a list of all usernames that have a specific value in a specific column.
 
@@ -567,7 +587,7 @@ INSERT INTO player_data (
         return players_creation_timestamps
     # end get_player_creation_timestamp
 
-    def get_player_total_playtime(self, username:str) -> tuple[str, float]:
+    def get_player_total_play_time(self, username:str) -> tuple[str, float]:
         """Retrieves a tuple with the username and their total playtime.
 
         Args:
@@ -585,7 +605,7 @@ INSERT INTO player_data (
         return players_total_playtime
     # end get_player_total_playtime
 
-    def get_player_last_login(self, username:str) -> tuple[str, float]:
+    def get_player_lastLogin(self, username:str) -> tuple[str, float]:
         """Retrieves a tuple with a username and their last login.
 
         Args:
@@ -596,11 +616,21 @@ INSERT INTO player_data (
         """
         connection = self._connect_to_player_data() # Connect to
         cursor = connection.cursor() # Create cursor for the database
-        cursor.execute('SELECT last_login FROM players WHERE username = ?', (username,))
-        player_last_login = (username, cursor.fetchone()[0])
+        cursor.execute('SELECT lastLogin FROM players WHERE username = ?', (username,))
+        player_lastLogin = (username, cursor.fetchone()[0])
         connection.close()
-        return player_last_login
-    # end get_playeR_last_login
+        return player_lastLogin
+    # end get_playeR_lastLogin
+
+    def get_player_last_poll(self, username:str) -> tuple[str, float]:
+        """"""
+        connection = self._connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT last_poll FROM players WHERE username = ?', (username,))
+        player_last_poll = (username, cursor.fetchone()[0])
+        connection.close()
+        return player_last_poll
+    # end get_player_last_poll
 
     def update_player_total_play_time(self, username:str, incrementBy:float) -> None:
         """Increments the total play time of a player stored in the database.
@@ -618,7 +648,7 @@ INSERT INTO player_data (
         connection.close()
     # end update_player_total_play_time
 
-    def update_player_last_login(self, username:str, timestamp:float) -> None:
+    def update_player_lastLogin(self, username:str, timestamp:float) -> None:
         """Sets the given user's last login time to the timestamp provided.
 
         Args:
@@ -627,10 +657,18 @@ INSERT INTO player_data (
         """
         connection = self._connect_to_player_data() # Connect to
         cursor = connection.cursor() # Create cursor for the database
-        cursor.execute(f'UPDATE players SET last_login = ? WHERE username = ?', (timestamp, username,))
+        cursor.execute(f'UPDATE players SET lastLogin = ? WHERE username = ?', (timestamp, username,))
         connection.commit()
         connection.close()
-    # end update_player_last_login
+    # end update_player_lastLogin
+
+    def update_player_last_poll(self, username:str, timestamp:float) -> None:
+        connection = self._connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute(f'UPDATE players SET last_poll = ? WHERE username = ?', (timestamp, username,))
+        connection.commit()
+        connection.close()
+    # end update_player_last_poll
 
     def get_top_in(self, column_name:str, quantity:int = 10, descending=True) -> list[tuple[str, int | float]]:
         """Retrieves a truncated list of players in a specific category from the database.
@@ -671,4 +709,15 @@ INSERT INTO player_data (
         connection.close()
         return players_in[:quantity]
     # end get_top_in
+
+    def verify_player_exists(self, username:str) -> bool:
+        exists = False
+        connection = self._connect_to_player_data() # Connect to
+        cursor = connection.cursor() # Create cursor for the database
+        cursor.execute('SELECT username FROM players WHERE username=?', (username,))
+        if cursor.fetchone()[0] == username:
+            exists = True
+        connection.close()
+        return exists
+    # end verify_player_exists
 # end Agent_Database

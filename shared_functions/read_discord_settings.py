@@ -22,6 +22,7 @@ def read_discord_settings(file_path = './settings_discord.json') -> dict:
                     "GUILD_ID" : 0 
                 }}, file, indent=4) # Redirect URLS are not really needed here.
         LOGGER.info('Created new settings_discord.json file, please fill out missing passwords and/or incorrect and/or missing data.')
+        input('Press Enter to continue...')
         with open(file_path, 'r') as file:
             return json.load(file)
     else:

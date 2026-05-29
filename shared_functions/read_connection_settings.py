@@ -18,11 +18,12 @@ def read_connection_settings(file_path = './settings_connection.json') -> dict:
                 "SFTP_USER" : "username.ID.etc",
                 "SFTP_PASS" : "",
                 "SFTP_PLAYER_DATA_PATH" : "./cache/Lua/PlayerCharacterDataCollector/Server",
-                "LOCAL_PLAYER_DATA_PATH" : "./PlayerCharacterDataCollector",
+                "LOCAL_PLAYER_DATA_PATH" : "./data/PlayerCharacterDataCollector",
                 "POLLING_RATE" : 5,
                 "MAX_POLLING_RATE" : 60,
             }, file, indent=4)
         LOGGER.info('Created new settings_connection.json file, please fill out missing passwords and/or incorrect and/or missing data.')
+        input('Press Enter to continue...')
         with open(file_path, 'r') as file:
             return json.load(file)
     else:
