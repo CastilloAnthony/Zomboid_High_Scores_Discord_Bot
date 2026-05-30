@@ -398,33 +398,79 @@ class Project_Zomboid_Commands(commands.Cog):
             await interaction.followup.send(f"```Could not find player a named {target}```")
     # end stats_slash
 
-    @app_commands.command(name="deaths", description="Show all of a ")
-    @app_commands.describe(target="A player's name.")
-    async def deaths_slash(self, interaction: discord.Interaction, target:str): #target2:str=None
+    @app_commands.command(name="deaths", description="Show a list of the most recent deaths (for an optional target).")
+    @app_commands.describe(target="A player's name, a death id, or 'all'.", quantity="The number of deaths to show (or a radius when scouting).", scout="Look around death id (Default: False).")
+    async def deaths_slash(self, interaction: discord.Interaction, target:str, quantity:int=10, scout:bool=False): #target2:str=None
         await interaction.response.defer(thinking=True)
-        if target == "": # Default
-            all_player_data = self.__player_data_agent.get_player_data()
-            combined = []
-            for player in all_player_data:
-                combined.append((player, len(all_player_data[player]['deaths'])))
-            top = sorted(combined, key=lambda x: x[1], reverse=True)[:10]
-            lines = []
-            for tuple in top:
-                status = "🟢" if tuple[0] in [pl for pl in self.__pz_rcon_agent.get_online_players()] else "🔴"
-                lines.append(f'{status} - {tuple[0]}: {tuple[1]}')
-            await interaction.followup.send(f"```📊 - Top 10 Players by Deaths:\n" + "\n".join(lines) + "```")
-        elif len(difflib.get_close_matches(target, self.__player_data_agent.get_player_data().keys())) > 0:
-            matches = difflib.get_close_matches(target, self.__player_data_agent.get_player_data().keys())
-            player_data = self.__player_data_agent.get_player_data(matches[0])
-            lines = []
-            if len(player_data['deaths']) > 0:
-                for index, death in enumerate(player_data['deaths']):
-                    url = 'https://b42map.com/?'+str(round(death['coords']['x']))+'x'+str(round(death['coords']['y']))
-                    lines.append(f"{index+1} - {datetime.fromtimestamp(round(death['timestamp'])).strftime("%B %d, %Y, %H:%M:%S")} {url}")
+        if target.isnumeric():
+            if not scout:
+                player_death = await self.__player_data_agent.get_death(int(target))
+                lines = []
+                url = 'https://b42map.com/?'+str(round(player_death['coords']['x']))+'x'+str(round(player_death['coords']['y']))+'x'+str(round(player_death['coords']['z']))
+                lines.append(f'Username: {player_death['username']}')
+                lines.append(f'Time of Death: {datetime.fromtimestamp(round(player_death['timestamp'])).strftime("%B %d, %Y, %H:%M:%S")}')
+                lines.append(f'Character Name: {player_death['character_name']}')
+                lines.append(f'Profession: {player_death['profession']}')
+                lines.append(f'Time Survived: {player_death['time_survived_string']}')
+                lines.append(f'Zombie Kills: {player_death['zombie_kills']}')
+                lines.append(f'Top 3 Perks:')
+                perks = []
+                skill_emojis = read_json_file('./skill_emojis.json')
+                for perk in player_death['perks']:
+                    perks.append((perk, player_death['perks'][perk], skill_emojis.get(perk)))
+                perks = sorted(perks, key=lambda x: x[1], reverse=True)
+                lines.append(f'\t{perks[0][2]} {perks[0][0]}: {perks[0][1]}')
+                lines.append(f'\t{perks[1][2]} {perks[1][0]}: {perks[1][1]}')
+                lines.append(f'\t{perks[2][2]} {perks[2][0]}: {perks[2][1]}')
+                await interaction.followup.send(f"```💀 - Death Report #{target} for {player_death['username']}:\n" + "\n".join(lines) + "```"+f'{url}')
             else:
-                lines.append(f"This player has not had any deaths")
+                player_deaths = await self.__player_data_agent.get_list_around_death_id(int(target), quantity)
+                lines = [
+                    f"📊 - {quantity*2} Deaths Surrounding Report #{target}:",
+                    '\nID - Datetime\tUsername'
+                ]
+                for death in player_deaths:
+                    lines.append(f'\n{death[0]} - {datetime.fromtimestamp(round(death[1])).strftime("%B %d, %Y, %H:%M:%S")}\t{death[2]}')
+                await interaction.followup.send(self.format_output(lines))
+        elif target == 'all': # Default
+            all_deaths = await self.__player_data_agent.get_list_of_deaths(quantity=quantity)
+            recent_deaths = sorted(all_deaths, key=lambda x: x[1], reverse=True)
+            lines = [
+                f"📊 - Recent {quantity} Deaths:",
+                '\nID - Datetime\tUsername'
+                ]
+            for death in recent_deaths:
+                lines.append(f'\n{death[0]} - {datetime.fromtimestamp(round(death[1])).strftime("%B %d, %Y, %H:%M:%S")}\t{death[2]}')
+            # all_player_data = self.__player_data_agent.get_player_data()
+            # combined = []
+            # for player in all_player_data:
+            #     combined.append((player, len(all_player_data[player]['deaths'])))
+            # top = sorted(combined, key=lambda x: x[1], reverse=True)[:10]
+            # lines = []
+            # for tuple in top:
+            #     status = "🟢" if tuple[0] in [pl for pl in self.__pz_rcon_agent.get_online_players()] else "🔴"
+            #     lines.append(f'{status} - {tuple[0]}: {tuple[1]}')
+            await interaction.followup.send(self.format_output(lines))
+        elif len(difflib.get_close_matches(target, await self.__player_data_agent.get_list_of_player_death_names())) > 0:
+            matches = difflib.get_close_matches(target, await self.__player_data_agent.get_list_of_player_death_names())
+            player_deaths = await self.__player_data_agent.get_list_of_deaths(matches[0], quantity)
+            recent_deaths = sorted(player_deaths, key=lambda x: x[1], reverse=True)
             status = "🟢" if matches[0] in [pl for pl in self.__pz_rcon_agent.get_online_players()] else "🔴"
-            await interaction.followup.send(f"```{status} - {matches[0]}\'s Deaths:\n```{'\n'.join(lines)}")
+            lines = [
+                f"{status} - {matches[0]}\'s Deaths (Total: {len(player_deaths)}):",
+                '\nID - Datetime\tUsername'
+                ]
+            for death in recent_deaths:
+                lines.append(f'\n{death[0]} - {datetime.fromtimestamp(round(death[1])).strftime("%B %d, %Y, %H:%M:%S")}\t{death[2]}')
+            # player_data = self.__player_data_agent.get_player_data(matches[0])
+            # lines = []
+            # if len(player_data['deaths']) > 0:
+            #     for index, death in enumerate(player_data['deaths']):
+            #         url = 'https://b42map.com/?'+str(round(death['coords']['x']))+'x'+str(round(death['coords']['y']))
+            #         lines.append(f"{index+1} - {datetime.fromtimestamp(round(death['timestamp'])).strftime("%B %d, %Y, %H:%M:%S")} {url}")
+            # else:
+            #     lines.append(f"This player has not had any deaths")
+            await interaction.followup.send(self.format_output(lines))
         else:
             await interaction.followup.send(f"```Could not find player a named {target}```")
     # end deaths_slash
@@ -645,6 +691,13 @@ class Project_Zomboid_Commands(commands.Cog):
             return "\n".join(lines)
         return "Wind data not retrieved."
     # end get_wind_description
+
+    def format_output(self, lines:list[str]) -> str:
+        output = ""
+        for line in lines:
+            if len(output) + len(line) <= 1993:
+                output += line
+        return "```"+output+"```"
 # end Project_Zomboid_Commands
 
 async def setup(bot:Discord_Bot):

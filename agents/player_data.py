@@ -4,6 +4,7 @@
 import os
 import time
 from pathlib import Path
+import asyncio
 import copy
 import traceback
 import paramiko
@@ -12,7 +13,7 @@ LOGGER: logging.Logger = logging.getLogger("bot")
 
 from shared_functions.read_connection_settings import read_connection_settings
 from shared_functions.player_data_functions import read_json_file, save_json_file, get_default_skills#, merge_duplicate_players
-
+from classes.database_player_deaths import Database_Player_Deaths
 class Agent_Player_Data():
     """Connects to an sftp server, copies json files from the server to a local dir, iterates over those files to import them to a variable accessible by a function
     """
@@ -31,6 +32,7 @@ class Agent_Player_Data():
         self.__timestamps = read_json_file(os.path.join(self.__settings['LOCAL_PLAYER_DATA_PATH'], 'player_data_timestamps.json'))
         self.__world_data = read_json_file(os.path.join(self.__settings['LOCAL_PLAYER_DATA_PATH'], 'world_state.json'))
         self.__player_data = read_json_file(file_path='./player_data.json') # Reads player_data.json
+        self.__player_deaths = Database_Player_Deaths()
         # self.merge_dupes()
         # self.repair_player_data()
         # self.poll_player_data()
@@ -166,16 +168,17 @@ class Agent_Player_Data():
                                                 self.__player_data[player_data['username']]['perks'][perk] # Player's previous perk level
                                                 ))
 
-                                if 'deaths' not in player_data:
-                                    if 'deaths' in self.__player_data[player_data['username']]:
-                                        player_data['deaths'] = self.__player_data[player_data['username']]['deaths']
-                                    else:
-                                        player_data['deaths'] = []
+                                # if 'deaths' not in player_data:
+                                #     if 'deaths' in self.__player_data[player_data['username']]:
+                                #         player_data['deaths'] = self.__player_data[player_data['username']]['deaths']
+                                #     else:
+                                #         player_data['deaths'] = []
 
                                 if player_data['is_alive'] != self.__player_data[player_data['username']]['is_alive'] and player_data['is_alive'] != True: # Check for deaths, Exclue new character
                                     # perks_exclude_fitness_strength = {perk: level for perk, level in player_data['perks'].items() if perk not in ['Fitness', 'Strength']}
                                     self.__deaths.append(copy.deepcopy(player_data))
-                                    player_data['deaths'].append(copy.deepcopy(player_data))
+                                    # player_data['deaths'].append(copy.deepcopy(player_data))
+                                    asyncio.run(self.__player_deaths.add_death(player_data['username'], player_data['timestamp'], player_data))
                                     # self.__deaths.append((
                                     #     player_data['username'], 
                                     #     player_data['hours_survived'], 
@@ -192,7 +195,7 @@ class Agent_Player_Data():
                                 player_data['totalPlayTime'] = 0
                                 player_data['lastLogin'] = time.time()
                                 player_data['lastPoll'] = time.time()
-                                player_data['deaths'] = []
+                                # player_data['deaths'] = []
                                 self.__player_data[player_data['username']] = player_data
                     else:
                         LOGGER.info(f'Player data json file is empty: {filename}')
@@ -421,6 +424,22 @@ class Agent_Player_Data():
         return curr_val
     # end get_deaths
 
+    async def get_list_of_player_death_names(self) -> list[str]:
+        return await self.__player_deaths.get_list_usernames()
+    # end get_list_of_players
+
+    async def get_death(self, death_id:int) -> dict:
+        return await self.__player_deaths.get_death(death_id)
+    # end get_death
+
+    async def get_list_of_deaths(self, username:str = '', quantity:int = 10) -> list[tuple[int, float, str]]:
+        return await self.__player_deaths.get_list_of_deaths(username, quantity)
+    # end get_list_of_deaths
+
+    async def get_list_around_death_id(self, death_id:int, radius:int=5) -> list[tuple[int, float, str]]:
+        return await self.__player_deaths.get_list_around(death_id, radius)
+    # end get_list_around_death_id
+
     def toggle_running(self) -> None:
         if self.__running:
             self.__running = False
@@ -435,6 +454,7 @@ class Agent_Player_Data():
                 self.poll_player_data()
                 self.generate_level_up_msgs()
                 self.generate_death_msgs()
+                asyncio.run(self.__player_deaths.read_usernames())
                 last_poll = time.time()
         # end while
     # end run_agent
